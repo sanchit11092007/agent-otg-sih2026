@@ -1,0 +1,12 @@
+[
+  {
+    "role": "user",
+    "content": "Hello, what models are you running?",
+    "timestamp": "2026-09-06 16:49:55"
+  },
+  {
+    "role": "assistant",
+    "content": "I'm designed to help with tasks related to document management, searching, and generation, but I don't run any specific models. My primary functions include working with Word documents, PDFs, and text, as well as searching within a local knowledge base. If you have a specific task or request, feel free to share more details!",
+    "timestamp": "2026-09-06 16:49:55"
+  }
+]
