@@ -1,0 +1,7 @@
+# Development and test dependencies for Agent OTG.
+# Runtime dependencies are intentionally kept in requirements.txt. Do not add
+# machine-local Conda file URLs here: they cannot be installed elsewhere.
+-r requirements.txt
+
+pytest>=8,<10
+httpx>=0.27,<1
