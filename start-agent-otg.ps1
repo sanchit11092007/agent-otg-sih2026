@@ -40,13 +40,13 @@ if (-not (Test-AgentPort 11434)) {
 if (-not (Test-AgentPort 8000)) {
     $venvPython = Join-Path $backendDir '.venv\Scripts\python.exe'
     $python = if (Test-Path -LiteralPath $venvPython) { $venvPython } else { (Get-Command python -ErrorAction Stop).Source }
-    Start-AgentProcess -FilePath $python -Arguments @('-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', '8000') -WorkingDirectory $backendDir
+    Start-AgentProcess -FilePath $python -Arguments @('-m', 'uvicorn', 'main:app', '--host', '0.0.0.0', '--port', '8000') -WorkingDirectory $backendDir
 }
 
 if (-not (Test-AgentPort 5173)) {
     $npm = (Get-Command npm.cmd -ErrorAction SilentlyContinue).Source
     if (-not $npm) { $npm = (Get-Command npm -ErrorAction Stop).Source }
-    Start-AgentProcess -FilePath $npm -Arguments @('run', 'dev', '--', '--host', '127.0.0.1') -WorkingDirectory $frontendDir
+    Start-AgentProcess -FilePath $npm -Arguments @('run', 'dev', '--', '--host', '0.0.0.0') -WorkingDirectory $frontendDir
 }
 
 $deadline = (Get-Date).AddSeconds(25)

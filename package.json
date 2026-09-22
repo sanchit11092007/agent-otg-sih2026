@@ -1,0 +1,9 @@
+{
+  "name": "agent-otg",
+  "private": true,
+  "description": "Agent OTG — SIH demo launcher",
+  "scripts": {
+    "demo": "npm run dev --prefix frontend",
+    "setup": "powershell -ExecutionPolicy Bypass -File ./start-demo.ps1"
+  }
+}

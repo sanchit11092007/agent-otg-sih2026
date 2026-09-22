@@ -32,7 +32,7 @@ function readWithIdleTimeout(reader, timeoutMs) {
   });
 }
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = 15_000) {
+async function fetchWithTimeout(url, options = {}, timeoutMs = 120_000) {
   const controller = new AbortController();
   const inheritedSignal = options.signal;
 
@@ -60,7 +60,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 15_000) {
   }
 }
 
-async function requestJson(path, options = {}, { timeoutMs = 15_000, retry = false } = {}) {
+async function requestJson(path, options = {}, { timeoutMs = 120_000, retry = false } = {}) {
   const attempts = retry ? 2 : 1;
   let lastError;
 
@@ -93,19 +93,19 @@ export function getHealth() {
 }
 
 export function getCapabilities() {
-  return requestJson('/capabilities');
+  return requestJson('/capabilities', {}, { timeoutMs: 15_000 });
 }
 
 export function resetConversation() {
-  return requestJson('/reset', { method: 'POST' });
+  return requestJson('/reset', { method: 'POST' }, { timeoutMs: 15_000 });
 }
 
 export function getSessions() {
-  return requestJson('/sessions', {}, { timeoutMs: 10_000, retry: true });
+  return requestJson('/sessions', {}, { timeoutMs: 15_000, retry: true });
 }
 
 export function getSessionMessages(sessionName) {
-  return requestJson(`/sessions/${encodeURIComponent(sessionName)}`, {}, { timeoutMs: 12_000, retry: true });
+  return requestJson(`/sessions/${encodeURIComponent(sessionName)}`, {}, { timeoutMs: 20_000, retry: true });
 }
 
 export function ingestKnowledgeBase(paths) {
@@ -113,7 +113,7 @@ export function ingestKnowledgeBase(paths) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ paths, replace_existing: false }),
-  });
+  }, { timeoutMs: 180_000 });
 }
 
 export async function uploadKnowledgeBase(files, { signal } = {}) {
@@ -125,10 +125,15 @@ export async function uploadKnowledgeBase(files, { signal } = {}) {
     method: 'POST',
     body: formData,
     signal,
-  }, 60_000);
+  }, 180_000);
   if (!response.ok) throw new Error(await getErrorMessage(response));
   return response.json();
 }
+
+export function clearKnowledgeBase() {
+  return requestJson('/knowledge-base/clear', { method: 'POST' }, { timeoutMs: 30_000 });
+}
+
 
 export function askAboutImage(query, image_b64, { signal } = {}) {
   return requestJson('/ask/image', {
@@ -136,7 +141,7 @@ export function askAboutImage(query, image_b64, { signal } = {}) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, image_b64 }),
     signal,
-  });
+  }, { timeoutMs: 300_000 });
 }
 
 /**
@@ -150,7 +155,7 @@ export async function streamQuestion(query, { signal, onEvent }) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
     signal,
-  }, 15_000);
+  }, 120_000);
 
   if (!response.ok) throw new Error(await getErrorMessage(response));
   if (!response.body) throw new Error('The backend returned an empty response stream.');
@@ -188,7 +193,7 @@ export async function streamQuestion(query, { signal, onEvent }) {
       if (signal?.aborted) {
         throw new DOMException('Generation stopped.', 'AbortError');
       }
-      const { done, value } = await readWithIdleTimeout(reader, 90_000);
+      const { done, value } = await readWithIdleTimeout(reader, 600_000);
       if (signal?.aborted) {
         throw new DOMException('Generation stopped.', 'AbortError');
       }
@@ -209,3 +214,105 @@ export async function streamQuestion(query, { signal, onEvent }) {
     reader.releaseLock();
   }
 }
+
+/**
+ * Get host network info (Hotspot and LAN IP addresses)
+ */
+export function getNetworkInfo() {
+  return requestJson('/network/info', {}, { timeoutMs: 5_000, retry: true });
+}
+
+/**
+ * Fetch a synced broadcast result by short PIN / ID
+ */
+export function getSyncContent(syncId) {
+  if (!syncId) throw new Error('Sync ID is required.');
+  return requestJson(`/sync/content/${encodeURIComponent(String(syncId).trim())}`, {}, { timeoutMs: 15_000 });
+}
+
+/**
+ * Retrieve recent shared broadcasts
+ */
+export function getRecentSyncs(limit = 15) {
+  return requestJson(`/sync/recent?limit=${limit}`, {}, { timeoutMs: 10_000, retry: true });
+}
+
+/**
+ * Get the latest active or completed sync item
+ */
+export function getLatestSync() {
+  return requestJson('/sync/latest', {}, { timeoutMs: 8_000, retry: true });
+}
+
+/**
+ * Submit a question from a remote/receiver device to be processed on the main server
+ */
+export function submitRemoteTask(query, { syncId, mode = 'agent' } = {}) {
+  return requestJson('/sync/submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, sync_id: syncId, mode }),
+  }, { timeoutMs: 30_000 });
+}
+
+/**
+ * Stream real-time progress for a specific Sync ID
+ */
+export async function streamSyncContent(syncId, { signal, onEvent }) {
+  if (!syncId) throw new Error('Sync ID is required.');
+  const response = await fetchWithTimeout(apiUrl(`/sync/stream/${encodeURIComponent(String(syncId).trim())}`), {
+    method: 'GET',
+    signal,
+  }, 120_000);
+
+  if (!response.ok) throw new Error(await getErrorMessage(response));
+  if (!response.body) throw new Error('The backend returned an empty response stream.');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  const onAbort = () => {
+    try {
+      reader.cancel(new DOMException('Stream stopped.', 'AbortError'));
+    } catch {}
+  };
+
+  if (signal?.aborted) {
+    onAbort();
+    throw new DOMException('Stream stopped.', 'AbortError');
+  }
+
+  signal?.addEventListener('abort', onAbort, { once: true });
+
+  const processLine = (line) => {
+    if (!line.trim()) return;
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed.type !== 'ping') {
+        onEvent(parsed);
+      }
+    } catch {}
+  };
+
+  try {
+    while (true) {
+      if (signal?.aborted) throw new DOMException('Stream stopped.', 'AbortError');
+      const { done, value } = await readWithIdleTimeout(reader, 600_000);
+      if (signal?.aborted) throw new DOMException('Stream stopped.', 'AbortError');
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || '';
+      lines.forEach(processLine);
+      if (done) break;
+    }
+    processLine(buffer);
+  } finally {
+    signal?.removeEventListener('abort', onAbort);
+    try {
+      await reader.cancel();
+    } catch {}
+    reader.releaseLock();
+  }
+}
+
