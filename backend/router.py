@@ -129,8 +129,8 @@ AVAILABLE_MODELS = {
     "code":       CODER_MODEL,
     "simple":     FAST_MODEL,
     "complex":    MAIN_MODEL,
-    "rag_search": FAST_MODEL,   # RAG does the heavy work; model just formats
-    "agent_task": MAIN_MODEL,   # Agent tasks use main model for planning
+    "rag_search": FAST_MODEL,   
+    "agent_task": MAIN_MODEL,   
     "image":      IMAGE_MODEL,
 }
 
